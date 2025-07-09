@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,31 +7,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PlusCircle, DollarSign, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTransactions } from "@/hooks/useTransactions";
 
-interface TransactionFormProps {
-  onTransactionAdded?: () => void;
-}
-
-export const TransactionForm = ({ onTransactionAdded }: TransactionFormProps) => {
+export const TransactionForm = () => {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    type: '',
+    type: '' as 'income' | 'expense' | '',
     amount: '',
     category: '',
     description: '',
     date: new Date().toISOString().split('T')[0]
   });
   const { toast } = useToast();
+  const { categories, addTransaction } = useTransactions();
 
-  const categories = {
-    income: ['Salary', 'Freelance', 'Investment', 'Business', 'Other Income'],
-    expense: ['Food & Dining', 'Transportation', 'Shopping', 'Entertainment', 'Bills & Utilities', 'Healthcare', 'Education', 'Other Expense']
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.type || !formData.amount || !formData.category || !formData.description) {
+    if (!formData.type || !formData.amount || !formData.description) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields.",
@@ -41,24 +33,25 @@ export const TransactionForm = ({ onTransactionAdded }: TransactionFormProps) =>
       return;
     }
 
-    // Here you would normally save to your backend
-    console.log('Transaction data:', formData);
-    
-    toast({
-      title: "Transaction Added",
-      description: `${formData.type === 'income' ? 'Income' : 'Expense'} of $${formData.amount} has been recorded.`,
+    const categoryId = formData.category ? categories.find(cat => cat.name === formData.category)?.id || null : null;
+
+    await addTransaction({
+      description: formData.description,
+      amount: parseFloat(formData.amount),
+      category_id: categoryId,
+      transaction_type: formData.type as 'income' | 'expense',
+      transaction_date: formData.date,
     });
 
     // Reset form and close dialog
     setFormData({
-      type: '',
+      type: '' as 'income' | 'expense' | '',
       amount: '',
       category: '',
       description: '',
       date: new Date().toISOString().split('T')[0]
     });
     setOpen(false);
-    onTransactionAdded?.();
   };
 
   return (
@@ -84,7 +77,7 @@ export const TransactionForm = ({ onTransactionAdded }: TransactionFormProps) =>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Type *</Label>
-              <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value, category: ''})}>
+              <Select value={formData.type} onValueChange={(value) => setFormData({...formData, type: value as 'income' | 'expense', category: ''})}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -109,18 +102,17 @@ export const TransactionForm = ({ onTransactionAdded }: TransactionFormProps) =>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category">Category *</Label>
+            <Label htmlFor="category">Category</Label>
             <Select 
               value={formData.category} 
               onValueChange={(value) => setFormData({...formData, category: value})}
-              disabled={!formData.type}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select category" />
+                <SelectValue placeholder="Select category (optional)" />
               </SelectTrigger>
               <SelectContent>
-                {formData.type && categories[formData.type as keyof typeof categories]?.map((cat) => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

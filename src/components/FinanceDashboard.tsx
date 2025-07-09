@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { TransactionForm } from "@/components/TransactionForm";
 import { BudgetPlanningCard } from "@/components/BudgetPlanningCard";
+import { useAuth } from "@/hooks/useAuth";
+import { useTransactions } from "@/hooks/useTransactions";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -16,50 +19,62 @@ import {
   BarChart3,
   Calendar,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  LogOut,
+  Loader2
 } from "lucide-react";
 import financeHero from "@/assets/finance-hero.jpg";
 
-interface Transaction {
-  id: string;
-  description: string;
-  amount: number;
-  category: string;
-  date: string;
-  type: 'income' | 'expense';
-}
-
-interface BudgetCategory {
-  name: string;
-  spent: number;
-  budget: number;
-  color: string;
-}
-
 export const FinanceDashboard = () => {
-  // Mock data - in real app this would come from your backend
-  const totalBalance = 12847.32;
-  const monthlyIncome = 4500.00;
-  const monthlyExpenses = 2847.32;
+  const { user, signOut } = useAuth();
+  const { transactions, categories, loading } = useTransactions();
+
+  // Calculate financial metrics from real data
+  const { totalBalance, monthlyIncome, monthlyExpenses, currentSavings } = useMemo(() => {
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    
+    // Filter transactions for current month
+    const currentMonthTransactions = transactions.filter(t => {
+      const transactionDate = new Date(t.transaction_date);
+      return transactionDate.getMonth() + 1 === currentMonth && 
+             transactionDate.getFullYear() === currentYear;
+    });
+
+    const income = currentMonthTransactions
+      .filter(t => t.transaction_type === 'income')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const expenses = currentMonthTransactions
+      .filter(t => t.transaction_type === 'expense')
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    // Calculate total balance (simplified - in real app you'd track this properly)
+    const balance = transactions
+      .reduce((sum, t) => {
+        return t.transaction_type === 'income' 
+          ? sum + Number(t.amount)
+          : sum - Number(t.amount);
+      }, 0);
+
+    return {
+      totalBalance: balance,
+      monthlyIncome: income,
+      monthlyExpenses: expenses,
+      currentSavings: Math.max(0, balance), // Simplified savings calculation
+    };
+  }, [transactions]);
+
   const savingsGoal = 15000;
-  const currentSavings = 8420.50;
-
-  const recentTransactions: Transaction[] = [
-    { id: '1', description: 'Salary Deposit', amount: 4500.00, category: 'Income', date: '2024-01-15', type: 'income' },
-    { id: '2', description: 'Grocery Store', amount: -85.42, category: 'Food', date: '2024-01-14', type: 'expense' },
-    { id: '3', description: 'Electric Bill', amount: -120.00, category: 'Utilities', date: '2024-01-13', type: 'expense' },
-    { id: '4', description: 'Freelance Work', amount: 750.00, category: 'Income', date: '2024-01-12', type: 'income' },
-    { id: '5', description: 'Coffee Shop', amount: -4.50, category: 'Food', date: '2024-01-11', type: 'expense' },
-  ];
-
-  const budgetCategories: BudgetCategory[] = [
-    { name: 'Food & Dining', spent: 420, budget: 600, color: 'bg-blue-500' },
-    { name: 'Transportation', spent: 180, budget: 300, color: 'bg-green-500' },
-    { name: 'Entertainment', spent: 95, budget: 200, color: 'bg-purple-500' },
-    { name: 'Utilities', spent: 340, budget: 400, color: 'bg-orange-500' },
-  ];
-
   const savingsProgress = (currentSavings / savingsGoal) * 100;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -70,10 +85,21 @@ export const FinanceDashboard = () => {
           style={{ backgroundImage: `url(${financeHero})` }}
         >
           <div className="absolute inset-0 bg-gradient-to-r from-primary/80 to-primary/60" />
+          <div className="absolute top-4 right-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={signOut}
+              className="text-primary-foreground hover:bg-white/20"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
+          </div>
           <div className="relative h-full flex items-center justify-center text-center">
             <div>
               <h1 className="text-4xl font-bold text-primary-foreground mb-2">
-                Personal Finance Tracker
+                Welcome back, {user?.user_metadata?.full_name || user?.email}!
               </h1>
               <p className="text-xl text-primary-foreground/90">
                 Take control of your financial future
@@ -157,13 +183,13 @@ export const FinanceDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentTransactions.map((transaction) => (
+              {transactions.slice(0, 5).map((transaction) => (
                 <div key={transaction.id} className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/30 transition-colors">
                   <div className="flex items-center space-x-4">
                     <div className={`p-2 rounded-full ${
-                      transaction.type === 'income' ? 'bg-success/10' : 'bg-destructive/10'
+                      transaction.transaction_type === 'income' ? 'bg-success/10' : 'bg-destructive/10'
                     }`}>
-                      {transaction.type === 'income' ? (
+                      {transaction.transaction_type === 'income' ? (
                         <ArrowUpRight className={`h-4 w-4 text-success`} />
                       ) : (
                         <ArrowDownRight className={`h-4 w-4 text-destructive`} />
@@ -172,17 +198,22 @@ export const FinanceDashboard = () => {
                     <div>
                       <p className="font-medium">{transaction.description}</p>
                       <p className="text-sm text-muted-foreground">
-                        {transaction.category} • {transaction.date}
+                        {transaction.categories?.name || 'Uncategorized'} • {new Date(transaction.transaction_date).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   <div className={`font-bold text-lg ${
-                    transaction.type === 'income' ? 'text-success' : 'text-destructive'
+                    transaction.transaction_type === 'income' ? 'text-success' : 'text-destructive'
                   }`}>
-                    {transaction.type === 'income' ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+                    {transaction.transaction_type === 'income' ? '+' : '-'}${Number(transaction.amount).toFixed(2)}
                   </div>
                 </div>
               ))}
+              {transactions.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No transactions yet. Add your first transaction to get started!
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
